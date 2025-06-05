@@ -32,6 +32,8 @@ fun HomeScreen(
 
     var data by remember { mutableStateOf<AirQualityData?>(null) }
     var isLoading by remember { mutableStateOf(true) }
+    var hasError by remember { mutableStateOf(false) }
+
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -73,9 +75,16 @@ fun HomeScreen(
 
                     LaunchedEffect(Unit) {
                         scope.launch(Dispatchers.IO) {
-                            val result = obtenerCalidadAireUseCase()
-                            data = result
-                            isLoading = false
+                            try {
+                                val result = obtenerCalidadAireUseCase()
+                                data = result
+                                hasError = result == null
+                            } catch (e: Exception) {
+                                hasError = true
+                                data = null
+                            } finally {
+                                isLoading = false
+                            }
                         }
                     }
 
@@ -84,10 +93,12 @@ fun HomeScreen(
                             CircularProgressIndicator()
                         }
                     } else {
-                        data?.let {
-                            AirQualityCard(airData = it)
-                        } ?: run {
-                            Text("Error al cargar los datos", modifier = Modifier.padding(16.dp))
+                        if (hasError) {
+                            AirQualityCard(airData = null)
+                        } else {
+                            data?.let {
+                                AirQualityCard(airData = it)
+                            }
                         }
                     }
 
