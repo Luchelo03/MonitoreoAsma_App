@@ -7,9 +7,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import com.example.monitoreoasma.presentation.ui.history.HistorialScreen
 import com.example.monitoreoasma.presentation.ui.home.HomeScreen
 import com.example.monitoreoasma.presentation.ui.login.LoginScreen
+import com.example.monitoreoasma.presentation.ui.recomendations.RecomendacionesMedicasScreen
 import com.example.monitoreoasma.presentation.ui.test.AudioRecordingScreen
+import com.example.monitoreoasma.presentation.ui.test.GenerandoReporteScreen
+import com.example.monitoreoasma.presentation.ui.test.IngresoSintomasScreen
+import com.example.monitoreoasma.presentation.ui.test.ResultadosScreen
 import com.example.monitoreoasma.presentation.ui.test.TestIntroScreen
 import com.example.monitoreoasma.presentation.ui.test.VerificacionAudioScreen
 import kotlinx.coroutines.launch
@@ -62,9 +67,50 @@ fun AppNavGraph(
                 drawerState = drawerState,
                 onOpenDrawer = { scope.launch { drawerState.open() } },
                 onRepetirClick = { navController.navigate("test/audio") },
-                onEnviarClick = { navController.navigate("home") }
+                onEnviarClick = { navController.navigate("test/sintomas") }
             )
         }
+
+        composable("test/sintomas") {
+            IngresoSintomasScreen(
+                drawerState = drawerState,
+                onOpenDrawer = { scope.launch { drawerState.open() } },
+                onGuardarClick = { tos, disnea, inhalador ->
+                    // Aquí podrías guardar temporalmente los datos
+                    navController.navigate("test/generando")
+                }
+            )
+        }
+
+        composable("test/generando") {
+            GenerandoReporteScreen(
+                drawerState = drawerState,
+                onOpenDrawer = { scope.launch { drawerState.open() } },
+                onFinalizado = { navController.navigate("test/resultados") }
+            )
+        }
+
+        composable("test/resultados") {
+            ResultadosScreen(
+                onOpenDrawer = { scope.launch { drawerState.open() } },
+                onVerHistorialClick = { navController.navigate("historial") }
+            )
+        }
+
+        composable("historial") {
+            HistorialScreen(
+                onOpenDrawer = { scope.launch { drawerState.open() } }
+            )
+        }
+
+        composable("recomendaciones") {
+            RecomendacionesMedicasScreen(
+                drawerState = drawerState,
+                onOpenDrawer = { scope.launch { drawerState.open() } }
+            )
+        }
+
+
 
         // Agrega otras pantallas aquí (historial, perfil, etc.)
     }
