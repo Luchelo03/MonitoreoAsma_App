@@ -20,9 +20,10 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 fun LoginScreen(
-    onLoginClick: () -> Unit = {},
+    onLoginClick: (email: String, password: String) -> Unit = { _, _ -> },
     onRegisterClick: () -> Unit = {},
-    isLoading: Boolean = false
+    isLoading: Boolean = false,
+    errorMsg: String? = null // <--- nuevo
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -73,10 +74,20 @@ fun LoginScreen(
 
             // Botón Ingresar
             Button(
-                onClick = { onLoginClick() },
-                shape = MaterialTheme.shapes.small
+                onClick = { onLoginClick(email, password) },
+                shape = MaterialTheme.shapes.small,
+                enabled = !isLoading // <--- evita dobles clicks
             ) {
                 Text("Ingresar")
+            }
+            if (errorMsg != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = errorMsg,
+                    color = Color.Red,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))

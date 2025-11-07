@@ -3,6 +3,7 @@ package com.example.monitoreoasma.presentation.navigation
 import android.net.Uri
 import androidx.compose.material3.DrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -18,6 +19,9 @@ import com.example.monitoreoasma.presentation.ui.test.ResultadosScreen
 import com.example.monitoreoasma.presentation.ui.test.TestIntroScreen
 import com.example.monitoreoasma.presentation.ui.test.VerificacionAudioScreen
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+
 
 @Composable
 fun AppNavGraph(
@@ -26,19 +30,56 @@ fun AppNavGraph(
 ) {
     val scope = rememberCoroutineScope() // ✅ Esto debe estar dentro de la función Composable
 
-    NavHost(navController = navController, startDestination = "login") {
+    NavHost(navController = navController, startDestination = "splash") {
+
+        composable("splash") {
+            com.example.monitoreoasma.presentation.ui.SplashScreen(
+                onGoHome = {
+                    navController.navigate("home") {
+                        popUpTo("splash") { inclusive = true }
+                    }
+                },
+                onGoLogin = {
+                    navController.navigate("login") {
+                        popUpTo("splash") { inclusive = true }
+                    }
+                }
+            )
+        }
 
         composable("login") {
+            val vm: com.example.monitoreoasma.presentation.viewmodel.LoginViewModel =
+                androidx.lifecycle.viewmodel.compose.viewModel()
+
+            val isLoading by vm.isLoading.collectAsState()
+            val errorMsg by vm.errorMsg.collectAsState()
+
+            // Puedes mostrar un snackbar/dialog con errorMsg si quieres, por ahora nos basta con el flujo.
+
             LoginScreen(
-                onLoginClick = { navController.navigate("home") },
-                isLoading = false
+                isLoading = isLoading,
+                onLoginClick = { email, password ->
+                    vm.doLogin(email, password) {
+                        navController.navigate("home") {
+                            popUpTo("login") { inclusive = true }
+                        }
+                    }
+                },
+                onRegisterClick = { /* opcional */ },
+                errorMsg = errorMsg // <--- agrega este
             )
         }
 
         composable("home") {
+            val sessionVm: com.example.monitoreoasma.presentation.viewmodel.SessionViewModel =
+                androidx.lifecycle.viewmodel.compose.viewModel()
+            val userName by sessionVm.userName.collectAsState()
+            val scope = rememberCoroutineScope()
+
             HomeScreen(
-                userName = "Juanito",
-                onNavigateTo = { navController.navigate(it) }
+                userName = userName,
+                onNavigateTo = { navController.navigate(it) },
+                onOpenDrawer = { scope.launch { drawerState.open() } }  // <--- abre el drawer raíz
             )
         }
 

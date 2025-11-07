@@ -25,7 +25,8 @@ import kotlinx.coroutines.Dispatchers
 @Composable
 fun HomeScreen(
     onNavigateTo: (String) -> Unit = {},
-    userName: String = "usuario"
+    userName: String = "usuario",
+    onOpenDrawer: () -> Unit
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -46,9 +47,7 @@ fun HomeScreen(
                 TopAppBar(
                     title = { Text(text = "¡Hola $userName!", fontWeight = FontWeight.Bold) },
                     navigationIcon = {
-                        IconButton(onClick = {
-                            scope.launch { drawerState.open() }
-                        }) {
+                        IconButton(onClick = onOpenDrawer) {
                             Icon(imageVector = Icons.Default.Menu, contentDescription = "Menú")
                         }
                     },
@@ -128,13 +127,4 @@ fun HomeScreen(
             }
         )
     }
-}
-
-@Preview(showSystemUi = true)
-@Composable
-fun HomeScreenPreview() {
-    HomeScreen(
-        userName = "usuario",
-        onNavigateTo = {}
-    )
 }
