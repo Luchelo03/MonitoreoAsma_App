@@ -7,13 +7,38 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.monitoreoasma.presentation.ui.components.LineChart
-import com.example.monitoreoasma.presentation.ui.components.BarChart
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.monitoreoasma.presentation.viewmodel.HistorialViewModel
 
+// -------------------- Util: conversión de fecha ISO (API 24+) --------------------
+private fun isoUtcToLocal(iso: String): String {
+    val patterns = arrayOf(
+        "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+        "yyyy-MM-dd'T'HH:mm:ssXXX",
+        "yyyy-MM-dd'T'HH:mmXXX",
+        "yyyy-MM-dd" // fallback
+    )
+    for (p in patterns) {
+        try {
+            val inFmt = java.text.SimpleDateFormat(p, java.util.Locale.US)
+            inFmt.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            val date = inFmt.parse(iso)
+            if (date != null) {
+                val outFmt = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                outFmt.timeZone = java.util.TimeZone.getDefault()
+                return outFmt.format(date)
+            }
+        } catch (_: Exception) { /* probar siguiente patrón */ }
+    }
+    return iso // si no pudo parsear, devuelve tal cual
+}
+
+// -------------------- Modelo UI para pintar cada ítem --------------------
 data class RegistroAsma(
     val fecha: String,
     val sintomas: String,
@@ -26,15 +51,32 @@ data class RegistroAsma(
 fun HistorialScreen(
     onOpenDrawer: () -> Unit
 ) {
-    val historialSimulado = listOf(
-        RegistroAsma("2025-06-01", "Tos, Dificultad", "Mala", "Alto"),
-        RegistroAsma("2025-06-03", "Dificultad", "Regular", "Alto"),
-        RegistroAsma("2025-06-08", "Tos", "Mala", "Alto")
-    )
+    // ViewModel y estados
+    val vm: HistorialViewModel = viewModel()
+    val loading by vm.loading.collectAsState()
+    val error by vm.error.collectAsState()
+    val testRuns by vm.items.collectAsState()
+    val hasMore by vm.hasMore.collectAsState()
+    val loadingMore by vm.loadingMore.collectAsState()
 
-    val datosLinea = listOf(3f, 2f, 4f, 1f, 3f)
-    val etiquetas = listOf("01/06", "03/06", "05/06", "08/06", "10/06")
-    val frecuenciaSintomas = mapOf("Tos" to 5f, "Dificultad" to 4f, "Inhalador" to 2f)
+    // Carga inicial
+    LaunchedEffect(Unit) { vm.loadInitial() }
+
+    // Construcción del listado para UI
+    val historial = remember(testRuns) {
+        testRuns.map { it ->
+            RegistroAsma(
+                fecha = isoUtcToLocal(it.started_at),
+                sintomas = "—",          // se llenará cuando conectemos detalle
+                calidadAire = "—",       // se llenará cuando conectemos detalle
+                riesgo = when (it.risk.level.lowercase()) {
+                    "alto" -> "Alto"
+                    "medio" -> "Medio"
+                    else -> "Bajo"
+                }
+            )
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -54,43 +96,108 @@ fun HistorialScreen(
                 .padding(innerPadding)
                 .padding(16.dp)
         ) {
-            item {
-                Text("Historial de Riesgos Altos", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            items(historialSimulado) { registro ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text("Fecha: ${registro.fecha}")
-                        Text("Síntomas: ${registro.sintomas}")
-                        Text("Calidad del aire: ${registro.calidadAire}")
-                        Text("Riesgo: ${registro.riesgo}", fontWeight = FontWeight.SemiBold)
+            when {
+                loading -> {
+                    item {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(top = 24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
                     }
                 }
-            }
 
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Evolución de Crisis Asmáticas", fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(8.dp))
-                LineChart(datos = datosLinea, etiquetas = etiquetas)
-            }
+                error != null -> {
+                    item {
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                error ?: "Error al cargar",
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Button(onClick = { vm.loadInitial() }) { Text("Reintentar") }
+                        }
+                    }
+                }
 
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Síntomas más frecuentes", fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(8.dp))
-                BarChart(datos = frecuenciaSintomas)
-            }
+                historial.isEmpty() -> {
+                    item {
+                        Text(
+                            "Aún no hay pruebas registradas.",
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
 
-            item {
-                Spacer(modifier = Modifier.height(24.dp))
+                else -> {
+                    item {
+                        Text(
+                            "Historial de Riesgos",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    items(historial) { registro ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text("Fecha: ${registro.fecha}")
+                                Text("Síntomas: ${registro.sintomas}")
+                                Text("Calidad del aire: ${registro.calidadAire}")
+                                Text(
+                                    "Riesgo: ${registro.riesgo}",
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+
+                    // Pie de lista: paginación
+                    item {
+                        Spacer(Modifier.height(8.dp))
+                        if (hasMore) {
+                            if (loadingMore) {
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 12.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator()
+                                }
+                            } else {
+                                Button(
+                                    onClick = { vm.loadMore() },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) { Text("Cargar más") }
+                            }
+                        } else {
+                            Text(
+                                "No hay más resultados.",
+                                modifier = Modifier.padding(vertical = 12.dp),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    item { Spacer(modifier = Modifier.height(24.dp)) }
+                }
             }
         }
     }

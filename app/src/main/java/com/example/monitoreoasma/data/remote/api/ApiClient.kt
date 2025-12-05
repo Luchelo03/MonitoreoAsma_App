@@ -1,17 +1,24 @@
 package com.example.monitoreoasma.data.remote.api
 
 import android.util.Log
+import com.example.monitoreoasma.data.remote.dto.TestRunsResponse
+import com.example.monitoreoasma.data.remote.dto.TestRunItem
+import com.example.monitoreoasma.data.remote.dto.RiskSummary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.io.*
+import java.io.BufferedReader
+import java.io.DataOutputStream
+import java.io.File
+import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 
-private const val BASE_URL = "https://d7882879fdd9.ngrok-free.app" // tu ngrok actual
+private const val BASE_URL = "https://d7882879fdd9.ngrok-free.app"
 
 object ApiClient {
 
+    // --- CALIDAD DE AIRE ---
     suspend fun getAirQualityData(): JSONObject? {
         return withContext(Dispatchers.IO) {
             val url = URL("$BASE_URL/api/calidad-aire")
@@ -33,6 +40,7 @@ object ApiClient {
         }
     }
 
+    // --- LOGIN ---
     suspend fun login(email: String, password: String): Result<com.example.monitoreoasma.data.remote.dto.LoginResponse> {
         return withContext(Dispatchers.IO) {
             val url = URL("$BASE_URL/api/auth/login")
@@ -81,6 +89,7 @@ object ApiClient {
         }
     }
 
+    // --- SUBIDA DE AUDIO (TEST) ---
     suspend fun uploadAudioRecording(
         token: String,
         childId: String,
@@ -148,6 +157,7 @@ object ApiClient {
         }
     }
 
+    // --- /api/me SIMPLE (para ChildrenViewModel y otros) ---
     suspend fun getMe(token: String): JSONObject? = withContext(Dispatchers.IO) {
         val url = URL("$BASE_URL/api/me")
         val connection = (url.openConnection() as HttpURLConnection).apply {
@@ -165,17 +175,77 @@ object ApiClient {
                 .orEmpty()
 
             if (code == HttpURLConnection.HTTP_OK) {
-                return@withContext JSONObject(text)
+                JSONObject(text)
             } else {
                 Log.e("ApiClient", "getMe failed, code=$code, body=${text.take(300)}")
-                return@withContext null
+                null
             }
 
         } catch (e: Exception) {
             e.printStackTrace()
-            return@withContext null
+            null
         } finally {
             connection.disconnect()
+        }
+    }
+
+    // --- HISTORIAL: /api/children/{childId}/test-runs ---
+    suspend fun getTestRuns(
+        token: String,
+        childId: String,
+        limit: Int,
+        offset: Int
+    ): Result<TestRunsResponse> = withContext(Dispatchers.IO) {
+        val url = URL("$BASE_URL/api/children/$childId/test-runs?limit=$limit&offset=$offset")
+        val conn = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 8000
+            readTimeout = 8000
+            setRequestProperty("Authorization", "Bearer $token")
+        }
+        try {
+            val code = conn.responseCode
+            val body = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                ?.bufferedReader()?.use { it.readText() }.orEmpty()
+
+            Log.d("TEST_RUNS", "code=$code bodyPreview=${body.take(200)}")
+
+            if (code == HttpURLConnection.HTTP_OK) {
+                val json = JSONObject(body)
+                val itemsJson = json.getJSONArray("items")
+                val items = buildList {
+                    for (i in 0 until itemsJson.length()) {
+                        val itJ = itemsJson.getJSONObject(i)
+                        val riskJ = itJ.getJSONObject("risk")
+                        add(
+                            TestRunItem(
+                                test_run_id = itJ.getString("test_run_id"),
+                                started_at = itJ.getString("started_at"),
+                                finished_at = itJ.optString("finished_at", null),
+                                risk = RiskSummary(
+                                    level = riskJ.getString("level"),
+                                    score = riskJ.getDouble("score")
+                                )
+                            )
+                        )
+                    }
+                }
+                Result.success(
+                    TestRunsResponse(
+                        child_id = json.getString("child_id"),
+                        limit = json.getInt("limit"),
+                        offset = json.getInt("offset"),
+                        items = items
+                    )
+                )
+            } else {
+                Result.failure(RuntimeException(body.ifBlank { "test_runs_error_$code" }))
+            }
+        } catch (e: Exception) {
+            Log.e("TEST_RUNS", "Exception", e)
+            Result.failure(e)
+        } finally {
+            conn.disconnect()
         }
     }
 }
