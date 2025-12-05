@@ -8,8 +8,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.io.File
@@ -21,12 +19,12 @@ fun VerificacionAudioScreen(
     drawerState: DrawerState,
     onOpenDrawer: () -> Unit,
     onRepetirClick: () -> Unit,
-    onEnviarClick: () -> Unit
+    onEnviarClick: (String) -> Unit
 ) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
+
+    println("DEBUG → Llegó a verificacion: $audioFilePath")
 
     Scaffold(
         topBar = {
@@ -81,18 +79,19 @@ fun VerificacionAudioScreen(
 
             Text(
                 text = "Si no se escucha bien el audio, por favor vuelve a grabarlo.",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Normal
+                fontSize = 16.sp
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             Button(
                 onClick = {
-                    File(audioFilePath).delete() // elimina el audio anterior
+                    File(audioFilePath).delete()
                     onRepetirClick()
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondary
+                )
             ) {
                 Text("Repetir grabación")
             }
@@ -102,7 +101,8 @@ fun VerificacionAudioScreen(
             Button(
                 onClick = {
                     mediaPlayer?.release()
-                    onEnviarClick()
+                    println("DEBUG → Enviar desde verificacion: $audioFilePath")
+                    onEnviarClick(audioFilePath)
                 }
             ) {
                 Text("Enviar para análisis")

@@ -15,11 +15,14 @@ import androidx.compose.ui.unit.sp
 fun IngresoSintomasScreen(
     drawerState: DrawerState,
     onOpenDrawer: () -> Unit,
-    onGuardarClick: (tos: Boolean, disnea: Boolean, usoInhalador: Boolean) -> Unit
+    audioPath: String,
+    onGuardarClick: (Boolean, Boolean, Boolean, String) -> Unit
 ) {
     var tieneTos by remember { mutableStateOf(false) }
     var tieneDisnea by remember { mutableStateOf(false) }
     var usoInhalador by remember { mutableStateOf(false) }
+
+    println("DEBUG → Llegó a síntomas: $audioPath")
 
     Scaffold(
         topBar = {
@@ -68,7 +71,8 @@ fun IngresoSintomasScreen(
             Spacer(modifier = Modifier.height(32.dp))
 
             Button(onClick = {
-                onGuardarClick(tieneTos, tieneDisnea, usoInhalador)
+                println("DEBUG → Guardar síntomas: path=$audioPath")
+                onGuardarClick(tieneTos, tieneDisnea, usoInhalador, audioPath)
             }) {
                 Text("Guardar")
             }

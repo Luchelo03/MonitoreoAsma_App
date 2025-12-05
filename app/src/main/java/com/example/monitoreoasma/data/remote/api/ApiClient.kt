@@ -8,7 +8,7 @@ import java.io.*
 import java.net.HttpURLConnection
 import java.net.URL
 
-private const val BASE_URL = "https://59167af7ca43.ngrok-free.app"//ACÁ REEMPLAZA LA URL DE NGROK
+private const val BASE_URL = "https://d7882879fdd9.ngrok-free.app" // tu ngrok actual
 
 object ApiClient {
 
@@ -54,7 +54,7 @@ object ApiClient {
 
                 Log.d("Login", "HTTP code=$code, resp=${text.take(200)}")
                 if (code == HttpURLConnection.HTTP_OK) {
-                    val json = org.json.JSONObject(text)
+                    val json = JSONObject(text)
                     val user = json.getJSONObject("user")
                     val resp = com.example.monitoreoasma.data.remote.dto.LoginResponse(
                         access_token = json.getString("access_token"),
@@ -67,10 +67,8 @@ object ApiClient {
                             role = user.getString("role")
                         )
                     )
-                    Result.success(resp)
                     return@withContext Result.success(resp)
                 } else {
-                    // Loguea para ver qué devolvió el backend
                     Log.e("Login", "Login failed, code=$code, body=${text.take(500)}")
                     return@withContext Result.failure(RuntimeException(text.ifBlank { "login_error_$code" }))
                 }
@@ -80,6 +78,104 @@ object ApiClient {
             } finally {
                 connection.disconnect()
             }
+        }
+    }
+
+    suspend fun uploadAudioRecording(
+        token: String,
+        childId: String,
+        audioFile: File,
+        checklistJson: String,
+        district: String = "SMP"
+    ): JSONObject? = withContext(Dispatchers.IO) {
+        val boundary = "----AsmaBoundary${System.currentTimeMillis()}"
+        val url = URL("$BASE_URL/api/audio/classify-recording")
+        val connection = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 8000
+            readTimeout = 8000
+            doOutput = true
+            doInput = true
+            setRequestProperty("Authorization", "Bearer $token")
+            setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+        }
+
+        val output = DataOutputStream(connection.outputStream)
+
+        fun writeFormField(name: String, value: String) {
+            output.writeBytes("--$boundary\r\n")
+            output.writeBytes("Content-Disposition: form-data; name=\"$name\"\r\n\r\n")
+            output.writeBytes("$value\r\n")
+        }
+
+        fun writeFileField(name: String, file: File) {
+            output.writeBytes("--$boundary\r\n")
+            output.writeBytes(
+                "Content-Disposition: form-data; name=\"$name\"; filename=\"${file.name}\"\r\n"
+            )
+            output.writeBytes("Content-Type: audio/wav\r\n\r\n")
+
+            val bytes = file.readBytes()
+            output.write(bytes)
+            output.writeBytes("\r\n")
+        }
+
+        Log.d("UploadAudio", "POST $url (file=${audioFile.absolutePath})")
+
+        // Campos
+        writeFormField("child_id", childId)
+        writeFormField("checklist", checklistJson)
+        writeFormField("district", district)
+
+        // Archivo WAV
+        writeFileField("audio", audioFile)
+
+        // Cerrar body
+        output.writeBytes("--$boundary--\r\n")
+        output.flush()
+        output.close()
+
+        val responseCode = connection.responseCode
+        val body = (if (responseCode in 200..299) connection.inputStream else connection.errorStream)
+            ?.bufferedReader()?.use { it.readText() }.orEmpty()
+
+        return@withContext if (responseCode in 200..299) {
+            Log.d("UploadAudio", "HTTP code=$responseCode, body=${body.take(300)}")
+            JSONObject(body)
+        } else {
+            Log.e("UploadAudio", "Error HTTP code=$responseCode, body=${body.take(300)}")
+            null
+        }
+    }
+
+    suspend fun getMe(token: String): JSONObject? = withContext(Dispatchers.IO) {
+        val url = URL("$BASE_URL/api/me")
+        val connection = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 8000
+            readTimeout = 8000
+            setRequestProperty("Authorization", "Bearer $token")
+        }
+
+        try {
+            val code = connection.responseCode
+
+            val text = (if (code in 200..299) connection.inputStream else connection.errorStream)
+                ?.bufferedReader()?.use { it.readText() }
+                .orEmpty()
+
+            if (code == HttpURLConnection.HTTP_OK) {
+                return@withContext JSONObject(text)
+            } else {
+                Log.e("ApiClient", "getMe failed, code=$code, body=${text.take(300)}")
+                return@withContext null
+            }
+
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return@withContext null
+        } finally {
+            connection.disconnect()
         }
     }
 }
